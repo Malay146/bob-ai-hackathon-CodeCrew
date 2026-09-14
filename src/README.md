@@ -1,47 +1,35 @@
-# Source Code
+# WaferLens — Source
 
-Place all your project's source code in this folder.
+Next.js 16 app (App Router) + Prisma/Postgres, built on the
+[next-shadcn-admin-dashboard](https://github.com/arhamkhnz/next-shadcn-admin-dashboard)
+starter (shadcn/ui components throughout).
 
-## Structure Guidelines
+## Layout
 
-Organize your code logically. Here are common patterns — use whatever fits
-your project:
-
-### Web Application
 ```
-src/
-  backend/        ← API server code
-  frontend/       ← UI code
-  shared/         ← Shared utilities/types
+src/                      ← Next.js project root (this directory)
+  data-raw/               ← Raw UCI SECOM dataset (committed, see its README)
+  prisma/
+    schema.prisma         ← WaferLot / SuspectSensor / RootCauseFinding models
+  scripts/
+    import-secom.ts       ← Parses data-raw/*.data, seeds Postgres, runs first analysis
+  src/                    ← Next.js "src directory" (app/components/lib/...)
+    app/
+      (main)/dashboard/   ← Overview, Wafer Lots, Risk Watch, Ask Bob pages
+      api/assistant/      ← Chat endpoint backing the "Ask Bob" page
+    lib/
+      analysis/           ← Plain-statistics engine: correlation, root-cause
+                             ranking, risk scoring, trend (no ML libraries)
+      assistant.ts         ← Shared reasoning used by both the dashboard chat
+                             and the MCP tools below
+      watsonx.ts            ← Optional IBM watsonx.ai narration (falls back
+                             to templated text if unset)
+      secom/parse.ts        ← SECOM raw-format parser
+    mcp/
+      server.ts             ← MCP server exposing the same analysis as tools
+                             for the IBM Bob agent (npm run mcp)
+    components/ui/          ← shadcn/ui components
 ```
 
-### Data / AI Project
-```
-src/
-  data/           ← Data ingestion / preprocessing
-  models/         ← ML model code
-  api/            ← Serving layer
-  notebooks/      ← Jupyter notebooks (exploration)
-```
-
-### CLI / Script-based Tool
-```
-src/
-  cli/            ← CLI entry points
-  lib/            ← Core logic
-  utils/          ← Helpers
-```
-
-## Important Files to Include
-
-- `requirements.txt` or `package.json` — dependency manifest
-- `.env.example` — template for environment variables (NEVER commit `.env`)
-- Any database migration files
-- Configuration files
-
-## What NOT to Include in src/
-
-- `.env` files with real secrets
-- Large binary files (use Git LFS or link externally)
-- `node_modules/` or `venv/` (these are in `.gitignore`)
-- Build artifacts (`dist/`, `build/`, `__pycache__/`)
+See [`docs/setup-guide.md`](../docs/setup-guide.md) at the repo root for exact
+install/run/import commands.

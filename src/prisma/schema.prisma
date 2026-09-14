@@ -1,0 +1,77 @@
+// WaferLens data model.
+//
+// Source data: UCI SECOM semiconductor manufacturing dataset (1567 wafer lot
+// runs, 590 anonymized sensor/process-parameter readings per run, pass/fail
+// outcome). Anonymized sensor names stand in for "thousands of equipment
+// sensors, process parameters" from the problem statement — see
+// docs/known_limitations in the root submission for why real equipment
+///station names aren't available.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum LotOutcome {
+  PASS
+  FAIL
+}
+
+// HISTORICAL lots have a known outcome and feed the correlation/root-cause
+// engine. UPCOMING lots simulate batches that haven't run yet: their real
+// outcome is withheld from the analysis pipeline and only used to score how
+// good our risk prediction was, mirroring "predict which batches are at risk
+// before they run".
+enum LotRole {
+  HISTORICAL
+  UPCOMING
+}
+
+model WaferLot {
+  id           String     @id @default(cuid())
+  lotNumber    Int        @unique
+  capturedAt   DateTime
+  outcome      LotOutcome
+  role         LotRole
+  // { "S_1": 3030.93, "S_2": null, ... } — one entry per sensor/process param
+  sensorValues Json
+  riskScore    Float?
+  createdAt    DateTime   @default(now())
+
+  findings RootCauseFinding[]
+
+  @@index([role])
+  @@index([outcome])
+}
+
+// Global, precomputed per sensor across the HISTORICAL population — which
+// sensors' readings correlate with FAIL outcomes fab-wide.
+model SuspectSensor {
+  id          String   @id @default(cuid())
+  sensorKey   String   @unique
+  correlation Float
+  passMean    Float?
+  failMean    Float?
+  stdDev      Float?
+  rank        Int
+  updatedAt   DateTime @updatedAt
+}
+
+// Per-lot root cause ranking, cached the first time a lot is analysed.
+model RootCauseFinding {
+  id             String   @id @default(cuid())
+  lotId          String
+  lot            WaferLot @relation(fields: [lotId], references: [id], onDelete: Cascade)
+  sensorKey      String
+  probability    Float
+  deviationSigma Float
+  direction      String // "HIGH" | "LOW"
+  recommendation String
+  createdAt      DateTime @default(now())
+
+  @@index([lotId])
+}
