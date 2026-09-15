@@ -9,51 +9,76 @@
 # =============================================================================
 
 team:
-  name: ""                             # REQUIRED — e.g., "Orion Squad"
-  track: ""                            # REQUIRED — one of: AI | DevOps | Sustainability | Open
+  name: "CodeCrew"
+  track: "AI"
   lead:
-    name: ""                           # REQUIRED — e.g., "Alice Chen"
-    email: ""                          # REQUIRED — e.g., "alice.chen@ibm.com"
+    name: "Tirth Sorathia"
+    email: "23dce116@charusat.edu.in"
   members:
-    - name: ""                         # REQUIRED — Team member 1
-      email: ""
-    - name: ""                         # Add more members by copying the two lines above
-      email: ""
-    - name: ""
-      email: ""
+    - name: "Himpadma Patel"
+      email: "23dce084@charusat.edu.in"
+    - name: "Dheyansh Patel"
+      email: "23dcs071@charusat.edu.in"
+    - name: "Malay Patel"
+      email: "23dcs082@charusat.edu.in"
 
 submission:
-  title: ""                            # REQUIRED — Project display name, e.g., "SmartOps Dashboard"
+  title: "WaferLens"
 
-  problem_statement: >                 # REQUIRED — 1-3 sentences. What problem? Who has it?
-    Replace this text with a concise description of the real-world problem
-    your project addresses and who experiences it.
+  problem_statement: >
+    At advanced semiconductor fab nodes (3nm/5nm), a 1% yield drop costs tens
+    of millions of dollars per month. Process engineers spend weeks manually
+    cross-referencing thousands of equipment sensor readings and process
+    parameters per lot to find the root cause of a yield excursion, and have
+    no way to know a batch is at risk until after it has already run.
 
-  solution_summary: >                  # REQUIRED — 1-3 sentences. What did you build?
-    Replace this text with a clear description of your solution
-    and how it addresses the problem above.
+  solution_summary: >
+    WaferLens analyses wafer lot sensor data to rank the equipment sensors
+    most correlated with failure fab-wide, explains exactly how a given lot
+    deviates from the healthy baseline on those sensors with a ranked,
+    probability-scored root cause and recommended corrective action, and
+    flags upcoming batches whose process parameters resemble historical
+    low-yield lots before they run. The same analysis is exposed to an IBM
+    Bob agent as MCP tools, so an engineer can ask "why did lot 42 fail?" in
+    chat and get the identical, explainable answer the dashboard shows.
 
-  key_features:                        # REQUIRED — List 3 to 5 specific features you implemented
-    - ""                               # e.g., "Real-time pipeline anomaly detection using watsonx.ai"
-    - ""
-    - ""
-    - ""                               # optional 4th
-    - ""                               # optional 5th
+  key_features:
+    - "Fab-wide root cause ranking via correlation analysis (no ML, fully explainable)"
+    - "Per-lot ranked root causes with deviation severity and recommended corrective actions"
+    - "Upcoming batch risk scoring (0-100) with a retrospective accuracy check against real outcomes"
+    - "IBM Bob integration via MCP server exposing 6 tools backed by the same analysis engine"
+    - "Interactive Check-a-Batch tool: paste raw sensor readings, get an instant risk score and findings"
 
   tech_stack:
-    languages: []                      # REQUIRED — e.g., ["Python", "TypeScript"]
-    frameworks: []                     # e.g., ["FastAPI", "React"]
-    ibm_technologies: []               # e.g., ["watsonx.ai", "IBM Bob", "IBM Cloud Functions"]
-    databases: []                      # e.g., ["PostgreSQL", "Redis"]
-    other: []                          # e.g., ["Docker", "GitHub Actions", "Slack API"]
+    languages: ["TypeScript"]
+    frameworks: ["Next.js", "React", "Prisma"]
+    ibm_technologies: ["IBM Bob (MCP)", "watsonx.ai"]
+    databases: ["PostgreSQL"]
+    other: ["shadcn/ui", "Tailwind CSS", "Recharts"]
 
-  what_we_are_most_proud_of: >         # Optional but recommended — guides judges to your best work
-    Replace with what aspect of the submission you consider strongest
-    and want judges to pay special attention to.
+  what_we_are_most_proud_of: >
+    The root cause and risk-prediction engine is built entirely from plain,
+    explainable statistics (point-biserial correlation, z-score deviation)
+    rather than a trained model — every ranked cause and every risk score can
+    be traced back to a specific sensor's correlation and this lot's exact
+    deviation from the healthy baseline. That same engine is genuinely
+    load-bearing for IBM Bob: the MCP server calls the identical functions
+    the dashboard uses, so Bob's answers and the dashboard's numbers can
+    never drift apart.
 
-  known_limitations: >                 # Optional but recommended — be honest about gaps
-    Replace with any known limitations, incomplete features,
-    or shortcuts taken due to time constraints.
+  known_limitations: >
+    Defect-pattern analysis from wafer defect maps/images (scratches,
+    edge-rings, donuts, etc.) was not implemented. The dataset used here
+    (UCI SECOM) contains only anonymized sensor/process-parameter readings
+    and pass/fail outcomes, no defect imagery or defect-type labels, so
+    visual defect-pattern classification would require a different dataset
+    (e.g. WM-811K wafer maps) and an actual image-classification model,
+    which was out of scope given the team's stack and timeline. Separately,
+    the exact IBM Bob CLI/config format was not available to us during
+    development; the MCP server is built and tested against the standard
+    Model Context Protocol SDK and is ready to wire up once that spec is
+    available. There is also no authentication in this build — it's a
+    single-engineer demo tool, not multi-tenant.
 
 # =============================================================================
 # ARTIFACT LOCATIONS

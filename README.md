@@ -1,6 +1,6 @@
-# 🚀 [Your Project Title Here]
+# 🚀 WaferLens
 
-> ⚠️ **Replace everything in `[ ]` brackets with your actual content before submission.**
+> Wafer Yield Root Cause & Defect Pattern Analyser — built for the Bob AI Innovation Hackathon
 
 ---
 
@@ -8,36 +8,33 @@
 
 | Field | Value |
 |---|---|
-| **Team Name** | [Your Team Name] |
-| **Track** | [AI / DevOps / Sustainability / Open] |
-| **Team Lead** | [Name] — [email@ibm.com] |
-| **Members** | [Name 1], [Name 2], [Name 3] |
+| **Team Name** | CodeCrew |
+| **Track** | AI |
+| **Team Lead** | Tirth Sorathia — 23dce116@charusat.edu.in |
+| **Members** | Himpadma Patel, Dheyansh Patel, Malay Patel |
 
 ---
 
 ## 🎯 Problem Statement
 
-> In 2–3 sentences: What problem does your project solve? Who experiences this problem?
-
-[Describe the real-world problem your project addresses. Be specific about who the user is and what pain point they face.]
+At advanced semiconductor fab nodes (3nm/5nm), a 1% yield drop costs tens of millions of dollars per month. Process engineers spend weeks manually cross-referencing thousands of equipment sensor readings and process parameters per lot to find the root cause of a yield excursion, and have no way to know a batch is at risk until after it has already run.
 
 ---
 
 ## 💡 Solution
 
-> In 2–3 sentences: What did you build? How does it solve the problem above?
-
-[Describe your solution clearly. Explain the core mechanism — what makes it work.]
+WaferLens analyses wafer lot sensor data to rank the equipment sensors most correlated with failure fab-wide, explains exactly how a given lot deviates from the healthy baseline on those sensors with a ranked, probability-scored root cause and recommended corrective action, and flags upcoming batches whose process parameters resemble historical low-yield lots before they run. The same analysis is exposed to an IBM Bob agent as MCP tools, so an engineer can ask "why did lot 42 fail?" in chat and get the identical, explainable answer the dashboard shows.
 
 ---
 
 ## ✨ Key Features
 
-- **Feature 1:** [Brief description — e.g., "Real-time anomaly detection using watsonx.ai"]
-- **Feature 2:** [Brief description]
-- **Feature 3:** [Brief description]
-- **Feature 4:** [Optional]
-- **Feature 5:** [Optional]
+- **Fab-wide root cause ranking:** correlates every sensor's readings against failure outcomes across historical lots — no ML, fully explainable
+- **Per-lot root cause detail:** ranked probable causes with deviation severity (σ) and a recommended corrective action for each
+- **Upcoming batch risk scoring:** 0-100 risk score for batches that haven't run yet, with a retrospective accuracy check against real outcomes on the Risk Watch page
+- **IBM Bob integration:** MCP server exposing 6 tools (`get_fab_overview`, `get_lot_root_causes`, `list_at_risk_batches`, `explain_lot`, `explain_risk`, `ask_bob`) backed by the exact same analysis engine as the dashboard
+- **Check a Batch:** paste raw sensor readings (or load a real upcoming batch) and get an instant risk score + findings, no seeding required
+- **Import Dataset:** upload a new SECOM-format dataset from the dashboard and re-run the full analysis, or use the equivalent CLI script
 
 ---
 
@@ -45,18 +42,18 @@
 
 | Category | Technologies |
 |---|---|
-| **Languages** | [e.g., Python, TypeScript] |
-| **Frameworks** | [e.g., FastAPI, React] |
-| **IBM Technologies** | [e.g., watsonx.ai, IBM Bob, IBM Cloud] |
-| **Databases** | [e.g., PostgreSQL, Redis] |
-| **Other** | [e.g., Docker, GitHub Actions] |
+| **Languages** | TypeScript |
+| **Frameworks** | Next.js 16, React 19, Prisma |
+| **IBM Technologies** | IBM Bob (via MCP server), watsonx.ai (optional narration) |
+| **Databases** | PostgreSQL |
+| **Other** | shadcn/ui, Tailwind CSS, Recharts |
 
 ---
 
 ## 📁 Repository Structure
 
 ```
-├── src/                  # All source code
+├── src/                  # All source code (Next.js app, analysis engine, MCP server)
 ├── docs/                 # Written documentation
 │   ├── problem-statement.md
 │   ├── solution-overview.md
@@ -73,23 +70,18 @@
 
 ## ⚡ How to Run
 
-> **Copy these exact steps from your [`docs/setup-guide.md`](docs/setup-guide.md)**
+Full details in [`docs/setup-guide.md`](docs/setup-guide.md). Short version:
 
 ```bash
-# 1. Clone the repo
-git clone https://github.com/[your-repo].git
-cd [your-repo]
-
-# 2. Install dependencies
-[your install command here]
-
-# 3. Configure environment
-cp .env.example .env
-# Edit .env with your values
-
-# 4. Run the project
-[your run command here]
+cd src
+cp .env.example .env      # set DATABASE_URL to your Postgres instance
+npm install
+npm run db:push
+npm run import:secom      # seeds from the committed UCI SECOM dataset
+npm run dev
 ```
+
+Open `http://localhost:3000`.
 
 ---
 
@@ -106,16 +98,15 @@ cp .env.example .env
 
 ## ⚠️ Known Limitations
 
-> Be honest — judges appreciate transparency over overclaiming.
-
-- [Limitation 1: e.g., "Authentication is mocked — not production-ready"]
-- [Limitation 2: e.g., "Only tested on Chrome"]
-- [Limitation 3: e.g., "Feature X is scaffolded but not fully implemented"]
+- **Defect-pattern image analysis** (wafer defect maps — scratches, edge-rings, donuts, etc.) is not implemented. The UCI SECOM dataset used here has only anonymized sensor readings and pass/fail labels, no defect imagery — that would need a different dataset (e.g. WM-811K) and an actual image classifier, out of scope for this build.
+- **IBM Bob's exact CLI/config format** was not available during development. The MCP server is built against the standard Model Context Protocol SDK and ready to connect once that spec is available.
+- **No authentication** — this is a single-engineer demo tool, not multi-tenant.
+- Root-cause/risk statistics are computed in application memory rather than SQL-side, which is fine at this dataset's scale (1567 lots × 590 sensors) but would need to change for a much larger, continuously-running fab.
 
 ---
 
 ## 🏅 What We're Most Proud Of
 
-[Tell the judges what part of your submission is strongest and worth paying close attention to.]
+The root cause and risk-prediction engine is built entirely from plain, explainable statistics (point-biserial correlation, z-score deviation) rather than a trained model — every ranked cause and every risk score can be traced back to a specific sensor's correlation and this lot's exact deviation from the healthy baseline. That same engine is genuinely load-bearing for IBM Bob: the MCP server calls the identical functions the dashboard uses, so Bob's answers and the dashboard's numbers can never drift apart.
 
 ---
