@@ -14,6 +14,11 @@ graph TD
     LIB -->|Optional narration| WX[watsonx.ai]
 
     SEED[SECOM dataset<br/>CLI script or Import page] -->|Seeds| DB
+
+    FE -->|Static asset fetch — one-time| TFM[TF.js Model<br/>public/models/wafer-defect/]
+    TFM -->|Browser inference — no server round-trip| FE
+    MCP -->|classify_defect_image tool| SRV[Server-side TF.js<br/>pngjs + fs IO handler]
+    SRV -->|Same model weights from disk| TFM
 ```
 
 ## Components

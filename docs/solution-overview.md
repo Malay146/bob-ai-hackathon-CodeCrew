@@ -39,3 +39,15 @@ Because the team doesn't have an ML background, the "intelligence" here is delib
 
 - **IBM Bob (MCP integration):** `src/mcp/server.ts` runs an MCP server exposing six tools backed by the analysis engine (`get_fab_overview`, `get_lot_root_causes`, `list_at_risk_batches`, `explain_lot`, `explain_risk`, `ask_bob`). Bob calls these directly to answer engineer questions in chat, rather than Bob being a bolt-on chat widget over static text.
 - **watsonx.ai:** `src/lib/watsonx.ts` exchanges the `WATSONX_API_KEY` for an IAM token and calls the `ibm/granite-3-8b-instruct` text-generation endpoint, turning the computed root-cause/risk JSON into a concise engineer-facing explanation. Used by both the dashboard's "Ask Bob" chat and the MCP `explain_lot`/`explain_risk` tools; falls back to a clear templated summary when no credentials are set.
+
+## Two Complementary Analysis Paths
+
+WaferLens now combines two parallel, complementary approaches to wafer failure analysis:
+
+### 1. Sensor Statistics (SECOM dataset — tabular)
+Root-cause ranking, risk scoring, and corrective-action recommendations driven by plain statistics (point-biserial correlation, z-score deviation) over 590 sensor/process-parameter readings per lot. Fully server-side: data lives in PostgreSQL, computations run in Next.js server components and API routes, and the same functions are exposed as 6 MCP tools for IBM Bob.
+
+### 2. Defect-Pattern Image Classification (WM-811K dataset — CNN)
+A custom CNN trained from scratch on the WM-811K wafer-map dataset (not a transfer-learning model — wafer maps are categorical die-state grids, not photographic RGB, so ImageNet features do not transfer) classifies a 40×40 wafer defect map into one of 8 known failure patterns: Center, Donut, Edge-Loc, Edge-Ring, Loc, Near-full, Random, Scratch. Inference runs entirely in the browser via TensorFlow.js with no server round-trip — the model weights (~450 KB) are served as static assets and loaded once per browser session. The seventh MCP tool (`classify_defect_image`) replicates the same inference server-side using `pngjs` and a custom TF.js filesystem IO handler, so IBM Bob can classify a defect map without any browser or canvas dependency.
+
+Both paths surface through the same dashboard and both are exposed to IBM Bob via the MCP server, giving engineers a unified interface for sensor-level root-cause analysis and visual defect-pattern identification.

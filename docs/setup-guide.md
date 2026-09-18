@@ -34,6 +34,7 @@ git clone https://github.com/Malay146/bob-ai-hackathon-CodeCrew.git
 cd bob-ai-hackathon-CodeCrew/src
 
 # 2. Install dependencies (also runs `prisma generate`)
+#    Includes @tensorflow/tfjs (browser CNN inference) and pngjs (MCP server inference)
 npm install
 
 # 3. Create the database schema
@@ -67,6 +68,7 @@ After `npm run import:secom` and `npm run dev`:
 2. Open `http://localhost:3000/dashboard/lots`, click into any lot — you should see ranked root causes with recommended actions.
 3. Open `http://localhost:3000/dashboard/check`, click "Try a real upcoming batch", then "Analyze" — you should get a risk score and findings without any manual data entry.
 4. Open `http://localhost:3000/dashboard/assistant` and ask "why did lot 5 fail?" — you should get a natural-language answer generated from the same analysis.
+5. Open `http://localhost:3000/dashboard/defect-image`, click any of the 8 pattern buttons (e.g. **Scratch**) — the model (~450 KB) loads once, then you should see a ranked prediction within a couple of seconds.
 
 ## Running Tests
 

@@ -14,6 +14,8 @@ import { z } from "zod";
 
 import { AT_RISK_THRESHOLD, getOverviewStats } from "../lib/analysis/overview";
 import { computeLotRootCauses } from "../lib/analysis/root-cause";
+import { DEFECT_LABELS } from "../lib/analysis/defect-image";
+import { classifyByLabelOrBase64 } from "../lib/analysis/defect-image-server";
 import { answerAssistantMessage, explainLot, summarizeRisk } from "../lib/assistant";
 import { prisma } from "../lib/db";
 
@@ -90,6 +92,44 @@ server.tool(
   "Free-form question routed to the WaferLens assistant (mentions of a lot/batch number, 'risk'/'upcoming', or a general fab yield question are all handled).",
   { message: z.string() },
   async ({ message }) => ({ content: [{ type: "text", text: await answerAssistantMessage(message) }] }),
+);
+
+server.tool(
+  "classify_defect_image",
+  `Classify a wafer defect map image into one of 8 WM-811K failure patterns (${DEFECT_LABELS.join(", ")}) and return ranked probable causes with corrective actions. Provide either 'sample' (one of the 8 label names, to use the bundled PNG) or 'image_base64' (a base64-encoded 40×40 PNG). Exactly one of the two must be supplied.`,
+  {
+    sample: z
+      .string()
+      .optional()
+      .describe(
+        `One of the 8 label names: ${DEFECT_LABELS.join(", ")}. Loads the bundled sample PNG — useful for demos without file handling.`,
+      ),
+    image_base64: z
+      .string()
+      .optional()
+      .describe("Base64-encoded 40×40 greyscale PNG (0=blank die, 128=pass die, 255=fail die)."),
+  },
+  async ({ sample, image_base64 }) => {
+    const result = await classifyByLabelOrBase64({ sample, image_base64 });
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              topPrediction: result.ranked[0].label,
+              topConfidence: result.ranked[0].confidence,
+              cause: result.topCause,
+              action: result.topAction,
+              ranked: result.ranked,
+            },
+            null,
+            2,
+          ),
+        },
+      ],
+    };
+  },
 );
 
 async function main() {
