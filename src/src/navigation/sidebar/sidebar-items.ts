@@ -1,4 +1,14 @@
-import { AlertTriangle, Bot, FlaskConical, Gauge, LayoutDashboard, type LucideIcon, ScanLine, Upload } from "lucide-react";
+import {
+  AlertTriangle,
+  Bot,
+  FlaskConical,
+  Gauge,
+  LayoutDashboard,
+  Link2,
+  type LucideIcon,
+  ScanLine,
+  Upload,
+} from "lucide-react";
 
 export type NavBadge = "new" | "soon";
 
@@ -72,6 +82,12 @@ export const sidebarItems: NavGroup[] = [
         title: "Defect Patterns",
         url: "/dashboard/defect-image",
         icon: ScanLine,
+      },
+      {
+        id: "patterns",
+        title: "Sensor ↔ Defect",
+        url: "/dashboard/patterns",
+        icon: Link2,
       },
       {
         id: "assistant",

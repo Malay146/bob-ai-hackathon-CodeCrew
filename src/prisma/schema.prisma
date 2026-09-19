@@ -73,5 +73,22 @@ model RootCauseFinding {
   recommendation String
   createdAt      DateTime @default(now())
 
+  @@unique([lotId, sensorKey])
   @@index([lotId])
+}
+
+// One wafer with both its sensor readings and its defect pattern — the
+// joined data needed to correlate sensors with wafer-map failure patterns.
+// SECOM and WM-811K can't be joined (no shared IDs), so this table is fed
+// either by an uploaded paired CSV (real data) or a clearly-flagged
+// simulated seed. `simulated` keeps the two from being confused.
+model PairedWafer {
+  id            String   @id @default(cuid())
+  waferId       String   @unique
+  defectPattern String // "None" or one of the 8 WM-811K pattern names
+  sensorValues  Json
+  simulated     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  @@index([defectPattern])
 }

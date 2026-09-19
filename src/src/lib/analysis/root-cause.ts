@@ -125,6 +125,8 @@ export async function computeLotRootCauses(lotId: string): Promise<RootCauseSumm
   if (top.length > 0) {
     await prisma.rootCauseFinding.createMany({
       data: top.map((f) => ({ lotId, ...f })),
+      // Two concurrent requests can both miss the cache; the unique index + skipDuplicates keeps one copy.
+      skipDuplicates: true,
     });
   }
 

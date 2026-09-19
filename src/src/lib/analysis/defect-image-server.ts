@@ -8,7 +8,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { PNG } from "pngjs";
 
-import { DEFECT_CAUSES, DEFECT_LABELS } from "./defect-image";
+import {
+  assessWaferGrid,
+  DEFECT_CAUSES,
+  DEFECT_LABELS,
+  WAFER_STATE_INFO,
+  type WaferAssessment,
+} from "./defect-image";
 
 const IMG = 40;
 const MODEL_DIR = path.join(process.cwd(), "public", "models", "wafer-defect");
@@ -45,16 +51,26 @@ function getServerModel(): Promise<tf.LayersModel> {
   return serverModel;
 }
 
-function pngToTensor(buf: Buffer): tf.Tensor {
+/** Decodes a 40×40 PNG into a flat grid of 0..1 luminance values (one per die cell). */
+function pngToGrid(buf: Buffer): Float32Array {
   const png = PNG.sync.read(buf);
   if (png.width !== IMG || png.height !== IMG) {
     throw new Error(
       `expected a ${IMG}×${IMG} wafer map PNG, got ${png.width}×${png.height}`,
     );
   }
+  const grid = new Float32Array(IMG * IMG);
+  for (let i = 0; i < IMG * IMG; i++) {
+    // Luminance — greyscale maps (0=blank, 128=pass, 255=fail) are unchanged.
+    grid[i] = (0.299 * png.data[i * 4] + 0.587 * png.data[i * 4 + 1] + 0.114 * png.data[i * 4 + 2]) / 255;
+  }
+  return grid;
+}
+
+function gridToTensor(grid: Float32Array): tf.Tensor {
   const data = new Float32Array(IMG * IMG * 3);
   for (let i = 0; i < IMG * IMG; i++) {
-    const v = png.data[i * 4] / 255; // red channel (greyscale: 0=blank, 128=pass, 255=fail)
+    const v = grid[i];
     const ch = v < 0.33 ? 0 : v < 0.66 ? 1 : 2;
     data[i * 3 + ch] = 1;
   }
@@ -62,14 +78,34 @@ function pngToTensor(buf: Buffer): tf.Tensor {
 }
 
 export interface DefectResult {
+  /** "defect-pattern" means the CNN ran; any other state was decided from die counts alone. */
+  state: WaferAssessment["state"];
+  assessment: WaferAssessment;
+  /** Human-readable outcome: the top pattern name, or e.g. "Perfect wafer". */
+  title: string;
+  /** Empty unless state is "defect-pattern". */
   ranked: Array<{ label: string; confidence: number }>;
   topCause: string;
   topAction: string;
 }
 
 export async function classifyDefectPng(buf: Buffer): Promise<DefectResult> {
+  const grid = pngToGrid(buf);
+  const assessment = assessWaferGrid(grid);
+  if (assessment.state !== "defect-pattern") {
+    const info = WAFER_STATE_INFO[assessment.state];
+    return {
+      state: assessment.state,
+      assessment,
+      title: info.title,
+      ranked: [],
+      topCause: info.cause,
+      topAction: info.action,
+    };
+  }
+
   const model = await getServerModel();
-  const input = pngToTensor(buf);
+  const input = gridToTensor(grid);
   const output = model.predict(input) as tf.Tensor;
   const scores = Array.from(await output.data());
   input.dispose();
@@ -84,6 +120,9 @@ export async function classifyDefectPng(buf: Buffer): Promise<DefectResult> {
   const info = DEFECT_CAUSES[top.label];
 
   return {
+    state: "defect-pattern",
+    assessment,
+    title: top.label,
     ranked,
     topCause: info?.cause ?? "Unknown",
     topAction: info?.action ?? "Unknown",

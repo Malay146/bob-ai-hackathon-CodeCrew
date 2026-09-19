@@ -15,6 +15,7 @@
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "import:secom": "tsx scripts/import-secom.ts",
+    "seed:paired": "tsx scripts/seed-paired.ts",
     "mcp": "tsx src/mcp/server.ts"
   },
   "dependencies": {

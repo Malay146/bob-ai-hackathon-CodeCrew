@@ -8,7 +8,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { DEFECT_CAUSES, DEFECT_LABELS } from "@/lib/analysis/defect-image";
+import {
+  assessWaferGrid,
+  DEFECT_CAUSES,
+  DEFECT_LABELS,
+  WAFER_STATE_INFO,
+  type WaferAssessment,
+} from "@/lib/analysis/defect-image";
 
 // TF.js is loaded lazily — import type only here, dynamic import in getModel()
 // so it never runs during SSR (page uses dynamic with ssr:false).
@@ -32,26 +38,71 @@ interface Prediction {
   confidence: number;
 }
 
+// Cap on the decoded working size so a huge photo can't allocate a giant canvas.
+const MAX_SIDE = 2048;
+
+/**
+ * Reduces any decoded image to a 40×40 grid of luminance values by averaging the pixel block
+ * behind each cell (an exact box filter). A native 40×40 source maps 1:1 and stays verbatim;
+ * larger PNGs, JPEG/WebP compression noise and colour-mapped maps all collapse onto the grid
+ * without the ringing a browser resize filter adds around sharp cell edges.
+ */
+function toGridLuminance(img: HTMLImageElement, canvas: HTMLCanvasElement): Float32Array {
+  const scale = Math.min(1, MAX_SIDE / Math.max(img.naturalWidth, img.naturalHeight));
+  const w = Math.max(IMG, Math.round(img.naturalWidth * scale));
+  const h = Math.max(IMG, Math.round(img.naturalHeight * scale));
+
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
+  ctx.fillStyle = "#000"; // transparent pixels (PNG/WebP/GIF alpha) read as blank dies
+  ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(img, 0, 0, w, h);
+  const data = ctx.getImageData(0, 0, w, h).data;
+
+  const grid = new Float32Array(IMG * IMG);
+  for (let cy = 0; cy < IMG; cy++) {
+    const y0 = Math.floor((cy * h) / IMG);
+    const y1 = Math.max(y0 + 1, Math.floor(((cy + 1) * h) / IMG));
+    for (let cx = 0; cx < IMG; cx++) {
+      const x0 = Math.floor((cx * w) / IMG);
+      const x1 = Math.max(x0 + 1, Math.floor(((cx + 1) * w) / IMG));
+      let sum = 0;
+      for (let y = y0; y < y1; y++) {
+        for (let x = x0; x < x1; x++) {
+          const i = (y * w + x) * 4;
+          sum += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        }
+      }
+      grid[cy * IMG + cx] = sum / ((y1 - y0) * (x1 - x0)) / 255;
+    }
+  }
+  return grid;
+}
+
+type ClassifyResult =
+  | { kind: "pattern"; predictions: Prediction[]; assessment: WaferAssessment }
+  | { kind: "state"; assessment: WaferAssessment };
+
 async function classify(
   img: HTMLImageElement,
   canvas: HTMLCanvasElement,
-): Promise<Prediction[]> {
-  const tf = await import("@tensorflow/tfjs");
+): Promise<ClassifyResult> {
+  const grid = toGridLuminance(img, canvas);
 
-  canvas.width = IMG;
-  canvas.height = IMG;
-  const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
-  ctx.imageSmoothingEnabled = false; // nearest-neighbour — die states are categorical
-  ctx.clearRect(0, 0, IMG, IMG);
-  ctx.drawImage(img, 0, 0, IMG, IMG);
-  const data = ctx.getImageData(0, 0, IMG, IMG).data;
+  // The CNN only knows 8 defect patterns and must always pick one, so perfect / destroyed /
+  // not-a-wafer images are decided from die counts first and never reach the model.
+  const assessment = assessWaferGrid(grid);
+  if (assessment.state !== "defect-pattern") return { kind: "state", assessment };
+
+  const tf = await import("@tensorflow/tfjs");
 
   const model = await getModel();
 
   const input = tf.tidy(() => {
     const buf = new Float32Array(IMG * IMG * 3);
     for (let i = 0; i < IMG * IMG; i++) {
-      const v = data[i * 4] / 255; // red channel; PNG is greyscale 0/128/255
+      const v = grid[i]; // greyscale 0/128/255 → 0 / 0.5 / 1
       const channel = v < 0.33 ? 0 : v < 0.66 ? 1 : 2;
       buf[i * 3 + channel] = 1;
     }
@@ -63,9 +114,10 @@ async function classify(
   input.dispose();
   output.dispose();
 
-  return DEFECT_LABELS.map((label, i) => ({ label, confidence: scores[i] })).sort(
+  const predictions = DEFECT_LABELS.map((label, i) => ({ label, confidence: scores[i] })).sort(
     (a, b) => b.confidence - a.confidence,
   );
+  return { kind: "pattern", predictions, assessment };
 }
 
 type Status = "idle" | "loading-model" | "classifying" | "done" | "error";
@@ -74,15 +126,18 @@ export function DefectClassifier() {
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
   const [predictions, setPredictions] = useState<Prediction[]>([]);
+  const [assessment, setAssessment] = useState<WaferAssessment | null>(null);
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   const [activeLabel, setActiveLabel] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const objectUrlRef = useRef<string | null>(null);
 
   async function runClassify(src: string, label?: string) {
     setStatus("loading-model");
     setError(null);
     setPredictions([]);
+    setAssessment(null);
     setPreviewSrc(src);
     setActiveLabel(label ?? null);
 
@@ -96,15 +151,17 @@ export function DefectClassifier() {
 
       await new Promise<void>((resolve, reject) => {
         img.onload = () => resolve();
-        img.onerror = () => reject(new Error("Image failed to load"));
+        img.onerror = () =>
+          reject(new Error("Couldn't read that image — try PNG, JPEG, WebP, GIF, BMP or AVIF."));
         img.src = src;
       });
 
       const canvas = canvasRef.current;
       if (!canvas) throw new Error("Canvas not available");
 
-      const results = await classify(img, canvas);
-      setPredictions(results);
+      const result = await classify(img, canvas);
+      setAssessment(result.assessment);
+      if (result.kind === "pattern") setPredictions(result.predictions);
       setStatus("done");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Classification failed");
@@ -119,7 +176,9 @@ export function DefectClassifier() {
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
     const url = URL.createObjectURL(file);
+    objectUrlRef.current = url;
     void runClassify(url, undefined);
     // Reset input so the same file can be re-selected
     e.target.value = "";
@@ -134,7 +193,7 @@ export function DefectClassifier() {
       {/* Sample selector row */}
       <div className="flex flex-col gap-2">
         <p className="text-muted-foreground text-sm">
-          Click a pattern to load the bundled sample, or upload your own 40×40 PNG:
+          Click a pattern to load the bundled sample, or upload your own wafer map image:
         </p>
         <div className="flex flex-wrap gap-2">
           {DEFECT_LABELS.map((label) => (
@@ -160,17 +219,18 @@ export function DefectClassifier() {
           onClick={() => fileInputRef.current?.click()}
         >
           <Upload className="size-4" />
-          Upload PNG
+          Upload image
         </Button>
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/png"
+          accept="image/png,image/jpeg,image/webp,image/gif,image/bmp,image/avif,.png,.jpg,.jpeg,.webp,.gif,.bmp,.avif"
           className="hidden"
           onChange={handleFileChange}
         />
         <span className="text-muted-foreground text-xs">
-          Must be a 40×40 greyscale wafer map (0 = blank, 128 = pass, 255 = fail)
+          PNG, JPG/JPEG, WebP, GIF, BMP or AVIF, any size (resized to 40×40). Expects the WM-811K
+          convention: dark = blank, mid-grey = pass die, bright = fail die.
         </span>
       </div>
 
@@ -212,6 +272,43 @@ export function DefectClassifier() {
                 style={{ imageRendering: "pixelated" }}
                 className="rounded-md border bg-muted"
               />
+            </div>
+          )}
+
+          {/* Perfect / destroyed / not-a-wafer — decided from die counts, model not run */}
+          {status === "done" && assessment && assessment.state !== "defect-pattern" && (
+            <div className="flex flex-1 flex-col gap-4 min-w-[260px]">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <ScanLine className="size-4" />
+                    Result
+                    <Badge variant={assessment.state === "perfect" ? "default" : "destructive"}>
+                      {WAFER_STATE_INFO[assessment.state].title}
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-2 text-sm">
+                  {assessment.state !== "not-a-wafer" && (
+                    <div className="text-muted-foreground">
+                      {assessment.failDies} of {assessment.validDies} dies failed (
+                      {(assessment.failFraction * 100).toFixed(1)}%)
+                    </div>
+                  )}
+                  <div>
+                    <span className="font-medium">Cause: </span>
+                    <span className="text-muted-foreground">{WAFER_STATE_INFO[assessment.state].cause}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium">Recommended action: </span>
+                    <span className="text-muted-foreground">{WAFER_STATE_INFO[assessment.state].action}</span>
+                  </div>
+                  <p className="text-muted-foreground text-xs">
+                    Decided from the die counts; the pattern classifier wasn&apos;t run because it only knows the 8
+                    defect patterns.
+                  </p>
+                </CardContent>
+              </Card>
             </div>
           )}
 

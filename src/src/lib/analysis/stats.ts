@@ -55,3 +55,21 @@ export function pairwiseValid(a: (number | null)[], b: (number | null)[]): { x: 
   }
   return { x, y };
 }
+
+// Abramowitz & Stegun 7.1.26 — good enough to compare p-values against a threshold.
+function erfc(x: number): number {
+  const t = 1 / (1 + 0.3275911 * x);
+  const poly = ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t;
+  return poly * Math.exp(-x * x);
+}
+
+/**
+ * Two-sided p-value for a correlation `r` over `n` pairs, using the normal
+ * approximation to the t distribution (reasonable for n of roughly 30+).
+ */
+export function correlationPValue(r: number, n: number): number {
+  if (n < 3) return 1;
+  const abs = Math.min(Math.abs(r), 0.999999999);
+  const t = abs * Math.sqrt((n - 2) / (1 - abs * abs));
+  return erfc(t / Math.SQRT2);
+}

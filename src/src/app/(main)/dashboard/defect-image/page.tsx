@@ -14,7 +14,9 @@ export default function Page() {
           categorical die-state grids, not photographic images. Returns a ranked cause and
           corrective action for each prediction. Inference runs entirely in the browser via
           TensorFlow.js with no server round-trip, complementing the sensor-based root cause
-          engine on the other dashboard pages.
+          engine on the other dashboard pages. Wafers with no failed dies, or essentially every die
+          failed, are reported as a Perfect or Destroyed wafer (decided from die counts, since the
+          model only knows the 8 patterns), and images with no dies as Not a wafer map.
         </CardDescription>
       </CardHeader>
       <CardContent>

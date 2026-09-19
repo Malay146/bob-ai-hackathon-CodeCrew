@@ -12,12 +12,14 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
-import { AT_RISK_THRESHOLD, getOverviewStats } from "../lib/analysis/overview";
-import { computeLotRootCauses } from "../lib/analysis/root-cause";
 import { DEFECT_LABELS } from "../lib/analysis/defect-image";
 import { classifyByLabelOrBase64 } from "../lib/analysis/defect-image-server";
+import { AT_RISK_THRESHOLD, getOverviewStats } from "../lib/analysis/overview";
+import { computeLotRootCauses } from "../lib/analysis/root-cause";
 import { answerAssistantMessage, explainLot, summarizeRisk } from "../lib/assistant";
 import { prisma } from "../lib/db";
+import { computePatternSensorLinks } from "../lib/pairing/correlate";
+import { DEFECT_PATTERNS } from "../lib/pairing/patterns";
 
 const server = new McpServer({ name: "waferlens", version: "0.1.0" });
 
@@ -117,11 +119,48 @@ server.tool(
           type: "text",
           text: JSON.stringify(
             {
-              topPrediction: result.ranked[0].label,
-              topConfidence: result.ranked[0].confidence,
+              // "defect-pattern" = the CNN ran; "perfect" / "destroyed" / "not-a-wafer" were decided
+              // from die counts because the CNN has no output for them.
+              state: result.state,
+              topPrediction: result.title,
+              failedDies: result.assessment.failDies,
+              validDies: result.assessment.validDies,
+              topConfidence: result.ranked[0]?.confidence ?? null,
               cause: result.topCause,
               action: result.topAction,
               ranked: result.ranked,
+            },
+            null,
+            2,
+          ),
+        },
+      ],
+    };
+  },
+);
+
+server.tool(
+  "get_pattern_sensor_links",
+  `Which sensors are correlated with each wafer defect pattern (${DEFECT_PATTERNS.join(", ")}), from wafers that have both sensor readings and a defect pattern. Each link is flagged significant only if it survives a Bonferroni correction. Reports whether the underlying data is simulated or imported — state that when relaying results.`,
+  {
+    pattern: z.enum(DEFECT_PATTERNS).optional().describe("Limit to one defect pattern; omit for all eight."),
+  },
+  async ({ pattern }) => {
+    const analysis = await computePatternSensorLinks();
+    if (analysis.totalWafers === 0) {
+      return { content: [{ type: "text", text: "No paired sensor/defect data loaded yet." }] };
+    }
+    const patterns = pattern ? analysis.patterns.filter((p) => p.pattern === pattern) : analysis.patterns;
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              dataSource: analysis.simulatedCount > 0 ? "SIMULATED (planted links, not real fab data)" : "imported",
+              totalWafers: analysis.totalWafers,
+              bonferroniThreshold: analysis.bonferroniThreshold,
+              patterns,
             },
             null,
             2,
